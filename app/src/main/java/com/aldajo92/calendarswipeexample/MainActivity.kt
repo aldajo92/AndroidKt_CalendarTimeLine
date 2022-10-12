@@ -32,12 +32,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             CalendarSwipeExampleTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-//                    Greeting("Android")
                     val list = (1..3).map { "item $it" }
                     CircularList(list, Modifier.fillMaxSize())
                 }
@@ -69,26 +67,6 @@ fun CircularList(
     val calendarMap = remember { mutableMapOf<Int, List<ItemDayUI>>() }
     val todayCalendar = remember { Calendar.getInstance() }
     val listState = rememberLazyListState(Int.MAX_VALUE / 2)
-
-    val context = LocalContext.current
-    val resources = context.resources
-    val displayMetrics = resources.displayMetrics
-    // Compute the screen width using the actual display width and the density of the display.
-    val screenWidth = displayMetrics.widthPixels / displayMetrics.density
-//    LazyRow(
-//        state = listState,
-//        modifier = modifier,
-//        flingBehavior = rememberSnapperFlingBehavior(listState),
-//    ) {
-//        items(Int.MAX_VALUE, itemContent = {
-//            val index = it % items.size
-//            Card(Modifier.width(screenWidth.dp)) {
-//                Box(Modifier.fillMaxSize()) {
-//                    Text(modifier = Modifier.align(Alignment.Center), text = items[index])
-//                }
-//            }
-//        })
-//    }
 
     val index = listState.firstVisibleItemIndex - (Int.MAX_VALUE / 2)
 
@@ -207,12 +185,10 @@ fun Calendar.weekItemDaysFromWeeksOffset(
     val localCalendar = this.clone() as Calendar
     localCalendar.add(Calendar.DATE, 7 * index)
 
-    val dayOfMonth = localCalendar.get(Calendar.DAY_OF_MONTH)
     val dayOfWeek = localCalendar.get(Calendar.DAY_OF_WEEK)
 
     val calendarNearMonday = localCalendar.clone() as Calendar
     calendarNearMonday.add(Calendar.DATE, -dayOfWeek + 2)
-    val nearMondayDayOfMonth = calendarNearMonday.get(Calendar.DAY_OF_MONTH)
 
     return (0..6).map {
         val tmpCalendar = calendarNearMonday.clone() as Calendar
@@ -235,42 +211,6 @@ data class ItemDayUI(
     val captionText: String = "0.00",
     val markDate: Boolean = false
 )
-
-//@OptIn(ExperimentalPagerApi::class)
-//@Composable
-//fun CircularList(
-//    items: List<String>,
-//    modifier: Modifier = Modifier,
-//    onItemClick: (String) -> Unit = {}
-//) {
-//    val pagerState = rememberPagerState(
-//        pageCount = 4,
-//        initialPage = 4/2
-////        initialOffscreenLimit = 4 / 2
-//    )
-//
-//    HorizontalPager(modifier = modifier, state = pagerState) { page ->
-//        // Our page content
-//        Column(
-//            horizontalAlignment = Alignment.CenterHorizontally,
-//            verticalArrangement = Arrangement.Center,
-//            modifier = Modifier.fillMaxSize()
-//        ) {
-//            Text(
-//                text = "Item: $page",
-//                textAlign = TextAlign.Center,
-//                modifier = Modifier.fillMaxWidth()
-//            )
-//            Text(
-//                text = "Something Else",
-//                textAlign = TextAlign.Center,
-//                modifier = Modifier.fillMaxWidth()
-//            )
-//            //Your other composable
-//        }
-//    }
-//}
-
 
 ////////////////////////////////////////////////////////
 
