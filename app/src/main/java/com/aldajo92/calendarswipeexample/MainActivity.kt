@@ -6,11 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,9 +38,11 @@ import java.util.*
 
 class MainViewModel : ViewModel() {
 
-    val todayCalendar = Calendar.getInstance()
+    private val todayCalendar = Calendar.getInstance()
 
-    private val _itemDayUIModelSelectedLiveData = MutableLiveData<ItemDayUIModel>()
+    private val _itemDayUIModelSelectedLiveData = MutableLiveData(
+        ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())
+    )
     val itemDayUIModelSelected: LiveData<ItemDayUIModel> = _itemDayUIModelSelectedLiveData
 
     fun updateItemDayUIModelSelected(itemDayUIModel: ItemDayUIModel) {
@@ -56,57 +61,63 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             CalendarSwipeExampleTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colors.background
+                ) {
+                    val localCoroutine = rememberCoroutineScope()
+                    val todayCalendar = remember { Calendar.getInstance() }
+                    val pagerSections = daysInWeekArray
+                    val pagerState = rememberPagerState(todayCalendar.getDayOfWeekIndex())
 
-                val localCoroutine = rememberCoroutineScope()
-                val todayCalendar = remember { Calendar.getInstance() }
-                val pagerSections = daysInWeekArray
-                val pagerState = rememberPagerState(todayCalendar.getDayOfWeekIndex())
+                    val calendarMap = remember { mutableMapOf<Int, List<ItemDayUIModel>>() }
 
-                val calendarMap = remember { mutableMapOf<Int, List<ItemDayUIModel>>() }
+                    val itemDayUIModelSelected =
+                        remember { mutableStateOf(ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())) }
 
-                val itemDayUIModelSelected =
-                    remember { mutableStateOf(ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())) }
+                    Column(Modifier.fillMaxSize()) {
 
-                Column(Modifier.fillMaxSize()) {
-
-                    CalendarHeaderComponent(
-                        modifier = Modifier.fillMaxWidth(),
-                        calendarWeekMap = calendarMap,
-                        todayCalendar = todayCalendar,
-                        itemDayUIModelSelected = itemDayUIModelSelected.value
-                    ) {
-                        itemDayUIModelSelected.value = it
-                        Log.d("ADJ Index", it.simpleDateModel.dayOfWeekIndex.toString())
-                        localCoroutine.launch {
-                            pagerState.animateScrollToPage(itemDayUIModelSelected.value.simpleDateModel.dayOfWeekIndex)
+                        CalendarHeaderComponent(
+                            modifier = Modifier.fillMaxWidth(),
+                            calendarWeekMap = calendarMap,
+                            todayCalendar = todayCalendar,
+                            itemDayUIModelSelected = itemDayUIModelSelected.value
+                        ) {
+                            itemDayUIModelSelected.value = it
+                            Log.d("ADJ Index", it.simpleDateModel.dayOfWeekIndex.toString())
+                            localCoroutine.launch {
+                                pagerState.animateScrollToPage(itemDayUIModelSelected.value.simpleDateModel.dayOfWeekIndex)
+                            }
                         }
-                    }
 
-                    LaunchedEffect(pagerState) {
-                        snapshotFlow { pagerState.currentPage }.collect { page ->
-                            Log.d("ADJ Swipe", page.toString())
+                        LaunchedEffect(pagerState) {
+                            snapshotFlow { pagerState.currentPage }.collect { page ->
+                                Log.d("ADJ Swipe", page.toString())
 //                            itemDayUIModelSelected.value = itemDayUIModelSelected.value.let {
 //                                val tmpSimpleDateModel =
 //                                    it.simpleDateModel.copy(dayOfWeekIndex = currentPageIndex)
 //                                it.copy(simpleDateModel = tmpSimpleDateModel)
 //                            }
+                            }
                         }
-                    }
 
-                    HorizontalPager(
-                        modifier = Modifier.weight(1f),
-                        count = pagerSections.size,
-                        state = pagerState
-                    ) { currentPage ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Gray)
-                        ) {
-                            Text(
-                                modifier = Modifier.align(Alignment.Center),
-                                text = currentPage.toString()
-                            )
+                        HorizontalPager(
+                            modifier = Modifier.weight(1f),
+                            count = pagerSections.size,
+                            state = pagerState
+                        ) { currentPage ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(5.dp)
+                                    .background(MaterialTheme.colors.background)
+                                    .border(2.dp, MaterialTheme.colors.onSurface)
+                            ) {
+                                Text(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    text = currentPage.toString()
+                                )
+                            }
                         }
                     }
                 }
