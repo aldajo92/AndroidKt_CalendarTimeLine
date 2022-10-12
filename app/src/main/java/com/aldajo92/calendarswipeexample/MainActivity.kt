@@ -4,16 +4,15 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,76 +21,133 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
 import com.aldajo92.calendarswipeexample.ui.theme.CalendarSwipeExampleTheme
+import com.google.accompanist.pager.ExperimentalPagerApi
+import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.rememberPagerState
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
 import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
+import kotlinx.coroutines.launch
 import java.util.*
 
+class MainViewModel : ViewModel() {
+
+    val todayCalendar = Calendar.getInstance()
+
+    private val _itemDayUIModelSelectedLiveData = MutableLiveData<ItemDayUIModel>()
+    val itemDayUIModelSelected: LiveData<ItemDayUIModel> = _itemDayUIModelSelectedLiveData
+
+    fun updateItemDayUIModelSelected(itemDayUIModel: ItemDayUIModel) {
+        _itemDayUIModelSelectedLiveData.value = itemDayUIModel
+    }
+
+
+}
+
 class MainActivity : ComponentActivity() {
+
+    val mainViewModel by viewModels<MainViewModel>()
+
+    @OptIn(ExperimentalPagerApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             CalendarSwipeExampleTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colors.background
-                ) {
-                    val list = (1..3).map { "item $it" }
-                    CircularList(list, Modifier.fillMaxSize())
+
+                val localCoroutine = rememberCoroutineScope()
+                val todayCalendar = remember { Calendar.getInstance() }
+                val pagerSections = daysInWeekArray
+                val pagerState = rememberPagerState(todayCalendar.getDayOfWeekIndex())
+
+                val calendarMap = remember { mutableMapOf<Int, List<ItemDayUIModel>>() }
+
+                val itemDayUIModelSelected =
+                    remember { mutableStateOf(ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())) }
+
+                Column(Modifier.fillMaxSize()) {
+
+                    CalendarHeaderComponent(
+                        modifier = Modifier.fillMaxWidth(),
+                        calendarWeekMap = calendarMap,
+                        todayCalendar = todayCalendar,
+                        itemDayUIModelSelected = itemDayUIModelSelected.value
+                    ) {
+                        itemDayUIModelSelected.value = it
+                        Log.d("ADJ Index", it.simpleDateModel.dayOfWeekIndex.toString())
+                        localCoroutine.launch {
+                            pagerState.animateScrollToPage(itemDayUIModelSelected.value.simpleDateModel.dayOfWeekIndex)
+                        }
+                    }
+
+                    LaunchedEffect(pagerState) {
+                        snapshotFlow { pagerState.currentPage }.collect { page ->
+                            Log.d("ADJ Swipe", page.toString())
+//                            itemDayUIModelSelected.value = itemDayUIModelSelected.value.let {
+//                                val tmpSimpleDateModel =
+//                                    it.simpleDateModel.copy(dayOfWeekIndex = currentPageIndex)
+//                                it.copy(simpleDateModel = tmpSimpleDateModel)
+//                            }
+                        }
+                    }
+
+                    HorizontalPager(
+                        modifier = Modifier.weight(1f),
+                        count = pagerSections.size,
+                        state = pagerState
+                    ) { currentPage ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Gray)
+                        ) {
+                            Text(
+                                modifier = Modifier.align(Alignment.Center),
+                                text = currentPage.toString()
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String) {
-    Text(text = "Hello $name!")
-}
-
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    CalendarSwipeExampleTheme {
-        Greeting("Android")
-    }
-}
-
 @OptIn(ExperimentalSnapperApi::class)
 @Composable
-fun CircularList(
-    items: List<String>,
+fun CalendarHeaderComponent(
     modifier: Modifier = Modifier,
-    onItemClick: (String) -> Unit = {}
+    calendarWeekMap: MutableMap<Int, List<ItemDayUIModel>> = mutableMapOf(), // Replace MutableMap by Map
+    todayCalendar: Calendar = Calendar.getInstance(),
+    itemDayUIModelSelected: ItemDayUIModel = ItemDayUIModel(),
+    itemDayClickedEvent: (ItemDayUIModel) -> Unit = {}
 ) {
-    val calendarMap = remember { mutableMapOf<Int, List<ItemDayUI>>() }
-    val todayCalendar = remember { Calendar.getInstance() }
     val listState = rememberLazyListState(Int.MAX_VALUE / 2)
 
     val index = listState.firstVisibleItemIndex - (Int.MAX_VALUE / 2)
 
-    calendarMap.saveToMapNoDuplicate(
+    calendarWeekMap.saveToMapNoDuplicate(
         (index + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
             index + 1,
             todayCalendar,
             dateComparator
         )
     )
-    calendarMap.saveToMapNoDuplicate(
+    calendarWeekMap.saveToMapNoDuplicate(
         index to todayCalendar.weekItemDaysFromWeeksOffset(
             index, todayCalendar,
             dateComparator
         )
     )
-    calendarMap.saveToMapNoDuplicate(
+    calendarWeekMap.saveToMapNoDuplicate(
         (index - 1) to todayCalendar.weekItemDaysFromWeeksOffset(
             index - 1,
             todayCalendar,
             dateComparator
         )
     )
-
-    Log.d("AlejandroGomez", "$index")
 
     LazyRow(
         state = listState,
@@ -101,7 +157,9 @@ fun CircularList(
         items(Int.MAX_VALUE, itemContent = { relativeIndex: Int ->
             val absoluteIndex = relativeIndex - (Int.MAX_VALUE / 2)
             WeekRowCalendarComponent(
-                listItemDaysUI = calendarMap[absoluteIndex] ?: listOf()
+                listItemDaysUI = calendarWeekMap[absoluteIndex] ?: listOf(),
+                itemDayUIModelSelected = itemDayUIModelSelected,
+                itemDayClickedEvent = itemDayClickedEvent
             )
         })
     }
@@ -111,9 +169,15 @@ fun CircularList(
 @Composable
 fun WeekRowCalendarComponent(
     modifier: Modifier = Modifier,
-    listItemDaysUI: List<ItemDayUI> = (0..6).map {
-        ItemDayUI(numberDay = "$it", textDay = daysInWeek[it])
-    }
+    listItemDaysUI: List<ItemDayUIModel> = (0..6).map {
+        ItemDayUIModel(
+            simpleDateModel = SimpleDateModel(dayOfWeekIndex = it),
+            numberDay = "$it",
+            textDay = daysInWeekArray[it]
+        )
+    },
+    itemDayUIModelSelected: ItemDayUIModel = ItemDayUIModel(),
+    itemDayClickedEvent: (ItemDayUIModel) -> Unit = {}
 ) {
     val context = LocalContext.current
     val resources = context.resources
@@ -124,51 +188,77 @@ fun WeekRowCalendarComponent(
         listItemDaysUI.map {
             ItemDayComponent(
                 modifier = Modifier.weight(1f),
-                numberDay = it.numberDay,
-                textDay = it.textDay,
-                showCircleBackground = it.markDate
+                itemDayUIModel = it,
+                showCircleBackground = it.markDate,
+                selectedItem = it.equalsInSimpleDate(itemDayUIModelSelected),
+                itemDayClickedEvent = itemDayClickedEvent
             )
         }
     }
 }
 
-@Preview
+@Preview(widthDp = 80)
 @Composable
 fun ItemDayComponent(
     modifier: Modifier = Modifier,
-    numberDay: String = "01",
-    textDay: String = "M",
-    captionText: String = "0.00",
-    showCircleBackground: Boolean = true
+    itemDayUIModel: ItemDayUIModel = ItemDayUIModel(),
+    showCircleBackground: Boolean = true,
+    selectedItem: Boolean = false,
+    itemDayClickedEvent: (ItemDayUIModel) -> Unit = {}
 ) {
-    Column(modifier = modifier) {
-        Text(modifier = Modifier.align(Alignment.CenterHorizontally), text = textDay)
+    Column(modifier = modifier.clickable { itemDayClickedEvent(itemDayUIModel) }) {
+        Text(modifier = Modifier.align(Alignment.CenterHorizontally), text = itemDayUIModel.textDay)
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
                 .height(IntrinsicSize.Min)
         ) {
-            if (showCircleBackground) Spacer(
-                modifier = Modifier
-                    .padding(8.dp)
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(Color.Gray)
-            )
+            if (selectedItem) {
+                Spacer(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(Color.Red)
+                )
+            } else {
+                if (showCircleBackground) Spacer(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(Color.Gray)
+                )
+            }
             Text(
                 modifier = Modifier.align(Alignment.Center),
-                text = numberDay,
+                text = itemDayUIModel.numberDay,
                 fontSize = 20.sp
             )
         }
-        Text(modifier = Modifier.align(Alignment.CenterHorizontally), text = captionText)
+        Text(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            text = itemDayUIModel.captionText
+        )
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////
+fun Calendar.getDayOfWeekIndex(): Int {
+    val dayOfWeekFromCalendar = this.get(Calendar.DAY_OF_WEEK) + 7
+    return (dayOfWeekFromCalendar - 2) % 7
+}
 
-val dateComparator = { today: Calendar, dayToRender: Calendar ->
-    today.timeInMillis >= dayToRender.timeInMillis
+fun Calendar.getDayOfMonth(): Int {
+    return get(Calendar.DAY_OF_MONTH)
+}
+
+fun Calendar.getMonth(): Int {
+    return get(Calendar.MONTH)
+}
+
+fun Calendar.getYear(): Int {
+    return get(Calendar.YEAR)
 }
 
 fun <K, V> MutableMap<K, V>.saveToMapNoDuplicate(entry: Pair<K, V>) {
@@ -181,7 +271,7 @@ fun Calendar.weekItemDaysFromWeeksOffset(
     index: Int,
     currentCalendar: Calendar = Calendar.getInstance(),
     comparativeDay: (Calendar, Calendar) -> Boolean = { _, _ -> false }
-): List<ItemDayUI> {
+): List<ItemDayUIModel> {
     val localCalendar = this.clone() as Calendar
     localCalendar.add(Calendar.DATE, 7 * index)
 
@@ -194,22 +284,47 @@ fun Calendar.weekItemDaysFromWeeksOffset(
         val tmpCalendar = calendarNearMonday.clone() as Calendar
         tmpCalendar.add(Calendar.DATE, it)
         val dayNumberInMonth = tmpCalendar.get(Calendar.DAY_OF_MONTH)
-        ItemDayUI(
+        ItemDayUIModel(
+            simpleDateModel = tmpCalendar.toSimpleDateModel(),
             numberDay = "$dayNumberInMonth",
-            textDay = daysInWeek[it],
+            textDay = daysInWeekArray[it],
             markDate = comparativeDay(currentCalendar, tmpCalendar)
         )
     }
 }
+
+fun Calendar.toSimpleDateModel() = SimpleDateModel(
+    dayOfWeekIndex = this.getDayOfWeekIndex(),
+    dayOfMonth = this.getDayOfMonth(),
+    month = this.getMonth(),
+    year = this.getYear()
+)
+
+fun ItemDayUIModel.equalsInSimpleDate(itemDayUIModel: ItemDayUIModel) =
+    this.simpleDateModel == itemDayUIModel.simpleDateModel
 ////////////////////////////////////////////////////////////////////////////
 
-val daysInWeek = arrayOf("M", "T", "W", "T", "F", "S", "S")
+val daysInWeekArray = arrayOf("M", "T", "W", "T", "F", "S", "S")
 
-data class ItemDayUI(
+val dateComparator = { today: Calendar, dayToRender: Calendar ->
+    today.timeInMillis >= dayToRender.timeInMillis
+}
+
+////////////////////////////////////////////////////////////////////////////
+
+data class ItemDayUIModel(
+    val simpleDateModel: SimpleDateModel = SimpleDateModel(),
     val numberDay: String = "01",
     val textDay: String = "M",
     val captionText: String = "0.00",
     val markDate: Boolean = false
+)
+
+data class SimpleDateModel(
+    val dayOfWeekIndex: Int = 0,
+    val dayOfMonth: Int = 0,
+    val month: Int = 0,
+    val year: Int = 0
 )
 
 ////////////////////////////////////////////////////////
