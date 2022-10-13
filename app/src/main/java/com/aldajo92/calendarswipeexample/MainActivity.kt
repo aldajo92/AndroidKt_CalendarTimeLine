@@ -1,7 +1,6 @@
 package com.aldajo92.calendarswipeexample
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -31,6 +30,8 @@ import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
 import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
 
@@ -38,79 +39,120 @@ class MainViewModel : ViewModel() {
 
     val todayCalendar = Calendar.getInstance()
     val todayItemDayUIModel = todayCalendar.toItemDayUIModel()
+    private val firstDayOfWeek = todayItemDayUIModel.simpleDateModel.dayOfWeekIndex
 
-    private val _itemDayUIModelSelectedLiveData = mutableStateOf(todayItemDayUIModel)
-    val itemDayUIModelSelectedLiveData: State<ItemDayUIModel> = _itemDayUIModelSelectedLiveData
+    val calendarMap = mutableMapOf<Int, List<ItemDayUIModel>>()
 
-    fun updateItemDayUIModelSelected(itemDayUIModel: ItemDayUIModel) {
-        _itemDayUIModelSelectedLiveData.value = itemDayUIModel
+    private val _itemDayUIModelSelectedFlow = MutableStateFlow(todayItemDayUIModel)
+    val itemDayUIModelSelectedFlow: StateFlow<ItemDayUIModel> = _itemDayUIModelSelectedFlow
+
+    private val _dayOfWeekIndexFlow = MutableStateFlow(firstDayOfWeek)
+    val dayOfWeekIndexFlow: StateFlow<Int> = _dayOfWeekIndexFlow
+
+    private val _weekOffsetFlow = MutableStateFlow(0)
+    val weekOffsetFlow: StateFlow<Int> = _weekOffsetFlow
+
+    fun updateItemDayUIModelSelected(itemDayUIModel: ItemDayUIModel, weekOffset: Int) {
+        _itemDayUIModelSelectedFlow.value = itemDayUIModel
+        _dayOfWeekIndexFlow.value = itemDayUIModel.simpleDateModel.dayOfWeekIndex
+        _weekOffsetFlow.value = weekOffset
     }
 
-    fun updateItemDayUIModelSelectedByPageIndex(pageIndex: Int) {
-        val currentDayIndex =
-            _itemDayUIModelSelectedLiveData.value.simpleDateModel.dayOfWeekIndex
-        val days = pageIndex - currentDayIndex
-        Log.d("ADJ Days", days.toString())
-        if (days != 0) {
-            val dayItem = _itemDayUIModelSelectedLiveData.value
-                .copy()
-                .simpleDateModel
-                .toCalendar()
-                .addDays(days)
-                .toItemDayUIModel()
-                .apply { updateItemDayUIModelSelected(this) }
+    fun updateByWeekIndex(dayOfWeekIndex: Int) {
+        _dayOfWeekIndexFlow.value = dayOfWeekIndex
+        val weekOffset = _weekOffsetFlow.value
 
-            Log.d("ADJ dayItem", dayItem.toString())
-            //?.apply { updateItemDayUIModelSelected(this) }}
+        getItemDayUIModelFromIndex(dayOfWeekIndex, weekOffset)?.let {
+            _itemDayUIModelSelectedFlow.value = it
         }
+        // _weekOffsetFlow.value = weekOffset // TODO: No modify yet
+    }
+
+    fun refreshWeekMap(weekIndex: Int) {
+        _weekOffsetFlow.value = weekIndex
+
+        calendarMap.saveToMapNoDuplicate(
+            (weekIndex + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
+                weekIndex + 1,
+                todayCalendar,
+                dateComparator
+            )
+        )
+        calendarMap.saveToMapNoDuplicate(
+            weekIndex to todayCalendar.weekItemDaysFromWeeksOffset(
+                weekIndex, todayCalendar,
+                dateComparator
+            )
+        )
+        calendarMap.saveToMapNoDuplicate(
+            (weekIndex - 1) to todayCalendar.weekItemDaysFromWeeksOffset(
+                weekIndex - 1,
+                todayCalendar,
+                dateComparator
+            )
+        )
+    }
+
+    private fun getItemDayUIModelFromIndex(
+        dayOfWeekIndexState: Int,
+        weekIndexState: Int
+    ): ItemDayUIModel? {
+        return calendarMap[weekIndexState]?.get(dayOfWeekIndexState)
     }
 
 }
 
 class MainActivity : ComponentActivity() {
 
-    val mainViewModel by viewModels<MainViewModel>()
+    private val mainViewModel by viewModels<MainViewModel>()
 
     @OptIn(ExperimentalPagerApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val pagerSections = daysInWeekArray
+
+            val calendarMap = mainViewModel.calendarMap
+
+            val dayOfWeekState by mainViewModel.dayOfWeekIndexFlow.collectAsState()
+            val pagerState = rememberPagerState(dayOfWeekState)
+
+            val dayOfWeekIndexState by mainViewModel.dayOfWeekIndexFlow.collectAsState()
+            val weekOffsetState by mainViewModel.weekOffsetFlow.collectAsState()
+
+            val itemDayUIModelSelected by mainViewModel.itemDayUIModelSelectedFlow.collectAsState()
+
             CalendarSwipeExampleTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
                     val localCoroutine = rememberCoroutineScope()
-                    val todayCalendar = remember { Calendar.getInstance() }
-                    val pagerSections = daysInWeekArray
-
-                    val calendarMap = remember { mutableMapOf<Int, List<ItemDayUIModel>>() }
-
-                    val itemDayUIModelSelectedState = mainViewModel.itemDayUIModelSelectedLiveData
-
-                    val pagerState =
-                        rememberPagerState(itemDayUIModelSelectedState.value.simpleDateModel.dayOfWeekIndex)
-
 
                     LaunchedEffect(pagerState) {
                         snapshotFlow { pagerState.currentPage }.collect { page ->
-                            Log.d("ADJ page", page.toString())
-                            Log.d("ADJ itemDay", itemDayUIModelSelectedState.value.toString())
+                            mainViewModel.updateByWeekIndex(page)
                         }
                     }
-
 
                     Column(Modifier.fillMaxSize()) {
                         CalendarHeaderComponent(
                             modifier = Modifier.fillMaxWidth(),
                             calendarWeekMap = calendarMap,
-                            todayCalendar = todayCalendar,
-                            itemDayUIModelSelected = itemDayUIModelSelectedState.value
-                        ) {
-                            mainViewModel.updateItemDayUIModelSelected(it)
+                            weekIndexChanged = {
+                                mainViewModel.refreshWeekMap(it)
+                            },
+                            itemDayUIModelSelected = itemDayUIModelSelected
+                        ) { itemDayUIModelSelected, weekOffset ->
+                            mainViewModel.updateItemDayUIModelSelected(
+                                itemDayUIModelSelected,
+                                weekOffset
+                            )
+
                             localCoroutine.launch {
-                                pagerState.animateScrollToPage(it.simpleDateModel.dayOfWeekIndex)
+                                pagerState.animateScrollToPage(itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex)
                             }
+
                         }
 
                         HorizontalPager(
@@ -131,6 +173,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(text = "weekIndex: $weekOffsetState")
+                            Text(text = "dayOfWeekIndex: $dayOfWeekIndexState")
+                        }
                     }
                 }
             }
@@ -142,47 +191,37 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CalendarHeaderComponent(
     modifier: Modifier = Modifier,
-    calendarWeekMap: MutableMap<Int, List<ItemDayUIModel>> = mutableMapOf(), // Replace MutableMap by Map
-    todayCalendar: Calendar = Calendar.getInstance(),
+    calendarWeekMap: Map<Int, List<ItemDayUIModel>> = mutableMapOf(),
     itemDayUIModelSelected: ItemDayUIModel = ItemDayUIModel(),
-    itemDayClickedEvent: (ItemDayUIModel) -> Unit = {}
+    weekIndexChanged: (Int) -> Unit = {},
+    itemDayClickedEvent: (ItemDayUIModel, Int) -> Unit = { _, _ -> }
 ) {
     val listState = rememberLazyListState(Int.MAX_VALUE / 2)
 
-    val index = listState.firstVisibleItemIndex - (Int.MAX_VALUE / 2)
-
-    calendarWeekMap.saveToMapNoDuplicate(
-        (index + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
-            index + 1,
-            todayCalendar,
-            dateComparator
-        )
-    )
-    calendarWeekMap.saveToMapNoDuplicate(
-        index to todayCalendar.weekItemDaysFromWeeksOffset(
-            index, todayCalendar,
-            dateComparator
-        )
-    )
-    calendarWeekMap.saveToMapNoDuplicate(
-        (index - 1) to todayCalendar.weekItemDaysFromWeeksOffset(
-            index - 1,
-            todayCalendar,
-            dateComparator
-        )
-    )
+    //    TODO: Use this to handle week change.
+    //    LaunchedEffect(key1 = listState) {
+    //        CoroutineScope(Dispatchers.IO).launch {
+    //            delay(5000)
+    //            withContext(localCoroutine.coroutineContext) {
+    //                listState.animateScrollToItem(Int.MAX_VALUE / 2 - 1)
+    //            }
+    //        }
+    //    }
 
     LazyRow(
         state = listState,
         modifier = modifier,
         flingBehavior = rememberSnapperFlingBehavior(listState),
     ) {
+        val weekOffsetIndex = listState.firstVisibleItemIndex - (Int.MAX_VALUE / 2)
+        weekIndexChanged(weekOffsetIndex)
+
         items(Int.MAX_VALUE, itemContent = { relativeIndex: Int ->
             val absoluteIndex = relativeIndex - (Int.MAX_VALUE / 2)
             WeekRowCalendarComponent(
                 listItemDaysUI = calendarWeekMap[absoluteIndex] ?: listOf(),
                 itemDayUIModelSelected = itemDayUIModelSelected,
-                itemDayClickedEvent = itemDayClickedEvent
+                itemDayClickedEvent = { itemDayClickedEvent(it, weekOffsetIndex) }
             )
         })
     }
