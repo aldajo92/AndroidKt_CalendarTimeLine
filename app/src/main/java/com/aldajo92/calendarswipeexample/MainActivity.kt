@@ -16,6 +16,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,22 +34,49 @@ import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
 import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.zip
 import kotlinx.coroutines.launch
 import java.util.*
 
 class MainViewModel : ViewModel() {
 
-    private val todayCalendar = Calendar.getInstance()
+    val todayCalendar = Calendar.getInstance()
+    val todayItemDayUIModel = todayCalendar.toItemDayUIModel()
 
-    private val _itemDayUIModelSelectedLiveData = MutableLiveData(
-        ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())
-    )
-    val itemDayUIModelSelected: LiveData<ItemDayUIModel> = _itemDayUIModelSelectedLiveData
+    private val _itemDayUIModelSelectedLiveData = mutableStateOf(todayItemDayUIModel)
+    val itemDayUIModelSelectedLiveData: State<ItemDayUIModel> = _itemDayUIModelSelectedLiveData
+
+//    private val _dayOfWeekIndexLiveData =
+//        MutableLiveData(todayItemDayUIModel.simpleDateModel.dayOfWeekIndex)
+//    val dayOfWeekIndexLiveData: LiveData<Int> = _dayOfWeekIndexLiveData
 
     fun updateItemDayUIModelSelected(itemDayUIModel: ItemDayUIModel) {
         _itemDayUIModelSelectedLiveData.value = itemDayUIModel
+//        _dayOfWeekIndexLiveData.value = itemDayUIModel.simpleDateModel.dayOfWeekIndex
+//        Log.d("ADJ Days", itemDayUIModel.toString())
     }
 
+    fun updateItemDayUIModelSelectedByPageIndex(pageIndex: Int) {
+        val currentDayIndex =
+            _itemDayUIModelSelectedLiveData.value?.simpleDateModel?.dayOfWeekIndex ?: 0
+        val days = pageIndex - currentDayIndex
+        Log.d("ADJ Days", days.toString())
+        if (days != 0) {
+            val dayItem = _itemDayUIModelSelectedLiveData.value
+                ?.copy()
+                ?.simpleDateModel
+                ?.toCalendar()
+                ?.addDays(days)
+                ?.toItemDayUIModel()
+                ?.apply { updateItemDayUIModelSelected(this) }
+
+            Log.d("ADJ dayItem", dayItem.toString())
+            //?.apply { updateItemDayUIModelSelected(this) }}
+        }
+    }
 
 }
 
@@ -68,36 +96,88 @@ class MainActivity : ComponentActivity() {
                     val localCoroutine = rememberCoroutineScope()
                     val todayCalendar = remember { Calendar.getInstance() }
                     val pagerSections = daysInWeekArray
-                    val pagerState = rememberPagerState(todayCalendar.getDayOfWeekIndex())
 
                     val calendarMap = remember { mutableMapOf<Int, List<ItemDayUIModel>>() }
 
-                    val itemDayUIModelSelected =
-                        remember { mutableStateOf(ItemDayUIModel(simpleDateModel = todayCalendar.toSimpleDateModel())) }
+                    val itemDayUIModelSelectedState = mainViewModel.itemDayUIModelSelectedLiveData
+//                    (
+//                        mainViewModel.todayItemDayUIModel
+//                    )
+//                    val dayOfWeekIndexState by mainViewModel.dayOfWeekIndexLiveData.observeAsState(
+//                        mainViewModel.todayCalendar.getDayOfWeekIndex()
+//                    )
+
+                    val pagerState =
+                        rememberPagerState(itemDayUIModelSelectedState.value.simpleDateModel.dayOfWeekIndex)
+
+
+                    LaunchedEffect(pagerState) {
+                        snapshotFlow { pagerState.currentPage }.collect { page ->
+                            Log.d("ADJ page", page.toString())
+                            Log.d("ADJ itemDay", itemDayUIModelSelectedState.value.toString())
+                        }
+
+//                            val flow1 = snapshotFlow { pagerState.currentPage }
+//                            val flow2 = flow { emit(itemDayUIModelSelectedState) }
+
+//                            flow2.zip(flow1) { itemDayUIModelSelected: ItemDayUIModel, page: Int ->
+//                                val currentDayIndex =
+//                                    itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex
+//                                val days = page - currentDayIndex
+////                                if (days != 0) {
+//                                val dayItem = itemDayUIModelSelected
+//                                    .copy()
+//                                    .simpleDateModel
+//                                    .toCalendar()
+//                                    .addDays(days)
+//                                    .toItemDayUIModel()
+//                                Log.d("ADJ days", days.toString())
+//                                Log.d("ADJ curItem", itemDayUIModelSelected.toString())
+//                                Log.d("ADJ dayItem", dayItem.toString())
+////                                localCoroutine.launch {
+////                                    mainViewModel.updateItemDayUIModelSelected(dayItem)
+////                                }
+//                                dayItem
+////                                mainViewModel.updateItemDayUIModelSelectedByPageIndex(page)
+////                                }
+//                            }.collect {
+//                                mainViewModel.updateItemDayUIModelSelected(it)
+//                            }
+
+
+//                            snapshotFlow { pagerState.currentPage }.collect { page ->
+//                                val currentDayIndex =
+//                                    itemDayUIModelSelectedState.simpleDateModel.dayOfWeekIndex
+//                                val days = page - currentDayIndex
+//                                if (days != 0) {
+//                                    val dayItem = itemDayUIModelSelectedState
+//                                        .copy()
+//                                        .simpleDateModel
+//                                        .toCalendar()
+//                                        .addDays(days)
+//                                        .toItemDayUIModel()
+//                                    Log.d("ADJ days", days.toString())
+//                                    Log.d("ADJ curItem", itemDayUIModelSelectedState.toString())
+//                                    Log.d("ADJ dayItem", dayItem.toString())
+//                                    localCoroutine.launch {
+//                                        mainViewModel.updateItemDayUIModelSelected(dayItem)
+//                                    }
+////                                mainViewModel.updateItemDayUIModelSelectedByPageIndex(page)
+//                                }
+//                            }
+                    }
+
 
                     Column(Modifier.fillMaxSize()) {
-
                         CalendarHeaderComponent(
                             modifier = Modifier.fillMaxWidth(),
                             calendarWeekMap = calendarMap,
                             todayCalendar = todayCalendar,
-                            itemDayUIModelSelected = itemDayUIModelSelected.value
+                            itemDayUIModelSelected = itemDayUIModelSelectedState.value
                         ) {
-                            itemDayUIModelSelected.value = it
-                            Log.d("ADJ Index", it.simpleDateModel.dayOfWeekIndex.toString())
+                            mainViewModel.updateItemDayUIModelSelected(it)
                             localCoroutine.launch {
-                                pagerState.animateScrollToPage(itemDayUIModelSelected.value.simpleDateModel.dayOfWeekIndex)
-                            }
-                        }
-
-                        LaunchedEffect(pagerState) {
-                            snapshotFlow { pagerState.currentPage }.collect { page ->
-                                Log.d("ADJ Swipe", page.toString())
-//                            itemDayUIModelSelected.value = itemDayUIModelSelected.value.let {
-//                                val tmpSimpleDateModel =
-//                                    it.simpleDateModel.copy(dayOfWeekIndex = currentPageIndex)
-//                                it.copy(simpleDateModel = tmpSimpleDateModel)
-//                            }
+                                pagerState.animateScrollToPage(it.simpleDateModel.dayOfWeekIndex)
                             }
                         }
 
@@ -272,6 +352,10 @@ fun Calendar.getYear(): Int {
     return get(Calendar.YEAR)
 }
 
+fun Calendar.addDays(days: Int): Calendar = Calendar.getInstance().apply {
+    this.add(Calendar.DATE, days)
+}
+
 fun <K, V> MutableMap<K, V>.saveToMapNoDuplicate(entry: Pair<K, V>) {
     if (!this.containsKey(entry.first)) {
         this[entry.first] = entry.second
@@ -311,8 +395,32 @@ fun Calendar.toSimpleDateModel() = SimpleDateModel(
     year = this.getYear()
 )
 
+fun Calendar.toItemDayUIModel() = this.toSimpleDateModel().let {
+    ItemDayUIModel(
+        simpleDateModel = it,
+        numberDay = it.dayOfMonth.toString(),
+        textDay = daysInWeekArray[it.dayOfWeekIndex]
+    )
+}
+
 fun ItemDayUIModel.equalsInSimpleDate(itemDayUIModel: ItemDayUIModel) =
     this.simpleDateModel == itemDayUIModel.simpleDateModel
+
+fun SimpleDateModel.toCalendar() = Calendar.getInstance().apply {
+    set(Calendar.DAY_OF_MONTH, this@toCalendar.dayOfMonth)
+    set(Calendar.MONTH, this@toCalendar.month)
+    set(Calendar.YEAR, this@toCalendar.year)
+}
+
+//fun SimpleDateModel.addDays(days: Int): SimpleDateModel {
+//    val itemCalendar = Calendar.getInstance()
+//    itemCalendar.set(Calendar.DAY_OF_MONTH, this.dayOfMonth)
+//    itemCalendar.set(Calendar.MONTH, this.month)
+//    itemCalendar.set(Calendar.YEAR, this.year)
+//    itemCalendar.add(Calendar.DATE, days)
+//
+//    return itemCalendar.toSimpleDateModel()
+//}
 ////////////////////////////////////////////////////////////////////////////
 
 val daysInWeekArray = arrayOf("M", "T", "W", "T", "F", "S", "S")

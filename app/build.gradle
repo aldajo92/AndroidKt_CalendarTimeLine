@@ -56,6 +56,7 @@ dependencies {
 
     implementation "dev.chrisbanes.snapper:snapper:0.3.0"
     implementation "com.google.accompanist:accompanist-pager:0.25.1"
+    implementation "androidx.compose.runtime:runtime-livedata:$compose_version"
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
