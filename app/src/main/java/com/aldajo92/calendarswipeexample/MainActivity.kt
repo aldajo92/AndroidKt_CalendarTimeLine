@@ -4,22 +4,42 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.widget.CalendarView
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.*
+import androidx.compose.material.Button
+import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModel
-import com.aldajo92.calendarswipeexample.ui.theme.CalendarSwipeExampleTheme
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.PagerState
@@ -124,7 +143,7 @@ class MainActivity : ComponentActivity() {
     private val mainViewModel by viewModels<MainViewModel>()
 
     @SuppressLint("CoroutineCreationDuringComposition")
-    @OptIn(ExperimentalPagerApi::class, ExperimentalMaterialApi::class)
+    @OptIn(ExperimentalPagerApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -140,21 +159,28 @@ class MainActivity : ComponentActivity() {
             val itemDayUIModelSelected by mainViewModel.itemDayUIModelSelectedFlow.collectAsState()
 
             val coroutineScope = rememberCoroutineScope()
-            val modalBottomSheetState: ModalBottomSheetState = rememberModalBottomSheetState(
-                ModalBottomSheetValue.Hidden,
-                confirmStateChange = { it != ModalBottomSheetValue.HalfExpanded }
-            )
 
-            CalendarSwipeExampleTheme {
-
-                BackHandler(modalBottomSheetState.isVisible) {
-                    coroutineScope.launch { modalBottomSheetState.hide() }
-                }
-
-                ModalBottomSheetLayout(
-                    modifier = Modifier.fillMaxSize(),
-                    sheetState = modalBottomSheetState,
-                    sheetContent = {
+            MainUI(
+                calendarMap,
+                pagerState,
+                listState,
+                dayOfWeekIndexState,
+                weekOffsetState,
+                itemDayUIModelSelected,
+                updateWeekEvent = {
+                    mainViewModel.updateByWeekIndex(it)
+                },
+                weekIndexChangedEvent = {
+                    mainViewModel.refreshWeekMap(it)
+                },
+                itemCalendarSelectedEvent = { itemSelected, weekOffset ->
+                    mainViewModel.updateItemDayUIModelSelected(
+                        itemSelected,
+                        weekOffset
+                    )
+                },
+                calendarClickEvent = {
+                    showAsBottomSheet { closeBottomSheet ->
                         BottomCalendarSheet(
                             simpleDateModel = itemDayUIModelSelected.simpleDateModel,
                             onDoneEvent = { itemDayFromCalendar ->
@@ -181,40 +207,14 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                coroutineScope.launch {
-                                    modalBottomSheetState.hide()
-                                }
-                            }
-                        )
-                    },
-                    content = {
-                        MainUI(
-                            calendarMap,
-                            pagerState,
-                            listState,
-                            dayOfWeekIndexState,
-                            weekOffsetState,
-                            itemDayUIModelSelected,
-                            updateWeekEvent = {
-                                mainViewModel.updateByWeekIndex(it)
-                            },
-                            weekIndexChangedEvent = {
-                                mainViewModel.refreshWeekMap(it)
-                            },
-                            itemCalendarSelectedEvent = { itemSelected, weekOffset ->
-                                mainViewModel.updateItemDayUIModelSelected(
-                                    itemSelected,
-                                    weekOffset
-                                )
-                            },
-                            calendarClickEvent = {
-                                coroutineScope.launch { modalBottomSheetState.show() }
+                                closeBottomSheet()
                             }
                         )
                     }
-                )
-            }
+                }
+            )
         }
+
     }
 }
 
@@ -229,6 +229,7 @@ fun MainUI(
     itemDayUIModelSelected: ItemDayUIModel = ItemDayUIModel(),
     updateWeekEvent: (Int) -> Unit = {},
     weekIndexChangedEvent: (Int) -> Unit = {},
+    addButtonClickEvent: () -> Unit = {},
     calendarClickEvent: () -> Unit = {},
     itemCalendarSelectedEvent: (ItemDayUIModel, Int) -> Unit = { _, _ -> }
 ) {
@@ -247,6 +248,7 @@ fun MainUI(
 
         Column(Modifier.fillMaxSize()) {
             MenuRowComponent(
+                onAddClicked = { addButtonClickEvent() },
                 onCalendarClick = { calendarClickEvent() }
             )
             CalendarHeaderComponent(
@@ -303,7 +305,9 @@ fun BottomCalendarSheet(
     onDoneEvent: (ItemDayUIModel?) -> Unit = {},
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
     ) {
         var dateSelected = remember<ItemDayUIModel?> { null }
         Box(
