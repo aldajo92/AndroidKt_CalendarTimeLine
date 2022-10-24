@@ -549,7 +549,7 @@ fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
     val differenceTimeMillis = reference.timeInMillis - calendarDate.timeInMillis
     val sign = -sign(differenceTimeMillis.toDouble()).toInt()
 
-    val differenceCalendar = Calendar.getInstance().apply {
+    val differenceCalendar = Calendar.getInstance().apply { // FIXME: This method generate errors for mondays
         timeInMillis = abs(differenceTimeMillis)
     }
 
