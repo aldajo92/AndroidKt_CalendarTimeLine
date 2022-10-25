@@ -22,22 +22,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 fun Activity.showAsBottomSheet(
-    wrapWithBottomSheetUI: Boolean = false,
     content: @Composable (() -> Unit) -> Unit
 ) {
     val viewGroup = this.findViewById(android.R.id.content) as ViewGroup
-    addContentToView(wrapWithBottomSheetUI, viewGroup, content)
+    addContentToView(viewGroup, content)
 }
 
 private fun addContentToView(
-    wrapWithBottomSheetUI: Boolean,
     viewGroup: ViewGroup,
     content: @Composable (() -> Unit) -> Unit
 ) {
     viewGroup.addView(
         ComposeView(viewGroup.context).apply {
             setContent {
-                BottomSheetWrapper(wrapWithBottomSheetUI, viewGroup, this, content)
+                BottomSheetWrapper(viewGroup, this, content)
             }
         }
     )
@@ -46,7 +44,6 @@ private fun addContentToView(
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun BottomSheetWrapper(
-    wrapWithBottomSheetUI: Boolean,
     parent: ViewGroup,
     composeView: ComposeView,
     content: @Composable (() -> Unit) -> Unit
