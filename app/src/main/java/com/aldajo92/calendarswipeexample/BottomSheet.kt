@@ -48,7 +48,6 @@ private fun BottomSheetWrapper(
     composeView: ComposeView,
     content: @Composable (() -> Unit) -> Unit
 ) {
-    val TAG = parent::class.java.simpleName
     val coroutineScope = rememberCoroutineScope()
     val modalBottomSheetState =
         rememberModalBottomSheetState(
@@ -74,7 +73,6 @@ private fun BottomSheetWrapper(
         animateHideBottomSheet(coroutineScope, modalBottomSheetState)
     }
 
-    // Take action based on hidden state
     LaunchedEffect(modalBottomSheetState.currentValue) {
         when (modalBottomSheetState.currentValue) {
             ModalBottomSheetValue.Hidden -> {
@@ -87,7 +85,7 @@ private fun BottomSheetWrapper(
                 }
             }
             else -> {
-                Log.i(TAG, "Bottom sheet ${modalBottomSheetState.currentValue} state")
+                Log.i(parent::class.java.simpleName, "Bottom sheet ${modalBottomSheetState.currentValue} state")
             }
         }
     }
