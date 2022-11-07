@@ -86,6 +86,11 @@ class MainViewModel : ViewModel() {
 
     fun updateByWeekIndex(dayOfWeekIndex: Int) {
         _dayOfWeekIndexFlow.value = dayOfWeekIndex
+        val weekOffset = _weekOffsetFlow.value
+
+        getItemDayUIModelFromIndex(dayOfWeekIndex, weekOffset)?.let {
+            _itemDayUIModelSelectedFlow.value = it
+        }
         // _weekOffsetFlow.value = weekOffset // TODO: No modify yet
     }
 
@@ -208,7 +213,6 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
-
     }
 }
 
@@ -553,7 +557,6 @@ fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
     val differenceTimeMillis = calendarDate.timeInMillis - reference.timeInMillis
 
     // 1 day = (1000ms / 1s) * (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (6day)  = 604800000L
-//    return (differenceTimeMillis / 518400000).toInt()
     return (differenceTimeMillis / 604800000).toInt()
 }
 

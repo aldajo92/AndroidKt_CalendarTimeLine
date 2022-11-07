@@ -85,7 +85,10 @@ private fun BottomSheetWrapper(
                 }
             }
             else -> {
-                Log.i(parent::class.java.simpleName, "Bottom sheet ${modalBottomSheetState.currentValue} state")
+                Log.i(
+                    parent::class.java.simpleName,
+                    "Bottom sheet ${modalBottomSheetState.currentValue} state"
+                )
             }
         }
     }
