@@ -2,6 +2,7 @@ package com.aldajo92.calendarswipeexample
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import android.widget.CalendarView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -61,7 +62,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
-import kotlin.math.abs
 
 class MainViewModel : ViewModel() {
 
@@ -192,12 +192,6 @@ class MainActivity : ComponentActivity() {
                                             itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex
                                         )
                                     }
-
-                                    coroutineScope.launch {
-                                        if (abs(weekOffset) > 10) {
-                                            listState.scrollToItem(Int.MAX_VALUE / 2 + weekOffset)
-                                        } else listState.animateScrollToItem(Int.MAX_VALUE / 2 + weekOffset)
-                                    }
                                 }
                                 closeBottomSheet()
                             }
@@ -228,6 +222,10 @@ fun MainUI(
         color = MaterialTheme.colors.background
     ) {
         val localCoroutine = rememberCoroutineScope()
+
+        LaunchedEffect(key1 = weekOffsetState, block = {
+            listState.scrollToItem(Int.MAX_VALUE / 2 + weekOffsetState)
+        })
 
         LaunchedEffect(pagerState) {
             snapshotFlow { pagerState.currentPage }.collect { page ->
