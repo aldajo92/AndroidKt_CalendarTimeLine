@@ -58,6 +58,7 @@ import com.google.accompanist.pager.PagerState
 import com.google.accompanist.pager.rememberPagerState
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
 import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -82,14 +83,12 @@ class MainViewModel : ViewModel() {
     }
 
     fun updateByWeekIndex(dayOfWeekIndex: Int) {
-        getItemDayUIModelFromIndex(dayOfWeekIndex, _weekOffsetFlow.value).let {
+        getItemDayUIModelFromIndex(dayOfWeekIndex, _weekOffsetFlow.value) {
             _itemDayUIModelSelectedFlow.value = it
         }
     }
 
     fun refreshWeekMap(weekIndex: Int) {
-        _weekOffsetFlow.value = weekIndex
-
         calendarMap.saveToMapNoDuplicate(
             (weekIndex + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
                 weekIndex + 1,
@@ -114,19 +113,38 @@ class MainViewModel : ViewModel() {
 
     private fun getItemDayUIModelFromIndex(
         dayOfWeekIndexState: Int,
-        weekIndexState: Int
-    ): ItemDayUIModel {
-        return calendarMap[weekIndexState]?.get(dayOfWeekIndexState) ?: run {
+        weekIndexState: Int,
+        resultCallback: (ItemDayUIModel) -> Unit = {}
+    ) {
+        val result = calendarMap[weekIndexState]?.get(dayOfWeekIndexState) ?: run {
             refreshWeekMap(weekIndexState)
             calendarMap[weekIndexState]?.get(dayOfWeekIndexState)!!
         }
+        resultCallback(result)
     }
 
     fun updateDataFromExternalItem(externalItemDayUIModel: ItemDayUIModel, weekOffset: Int) {
         val dayOfWeek = externalItemDayUIModel.simpleDateModel.dayOfWeekIndex
+        Log.i(
+            "itemDayUI_weekOffset",
+            weekOffset.toString()
+        )
         // Here we use the item directly from map from the date created by an external source
-        getItemDayUIModelFromIndex(dayOfWeek, weekOffset).let {
-            refreshWeekMap(weekOffset)
+        getItemDayUIModelFromIndex(dayOfWeek, weekOffset) {
+            Log.i(
+                "itemDayUI_equals",
+                (externalItemDayUIModel.simpleDateModel == it.simpleDateModel).toString()
+            )
+            if (externalItemDayUIModel.simpleDateModel != it.simpleDateModel) {
+                Log.i(
+                    "itemDayUI_selected",
+                    externalItemDayUIModel.toString()
+                )
+                Log.i(
+                    "itemDayUI_mapError",
+                    calendarMap[weekOffset]?.toString().orEmpty()
+                )
+            }
             updateItemDayUIModelSelected(
                 it,
                 weekOffset
@@ -188,7 +206,8 @@ class MainActivity : ComponentActivity() {
                                     mainViewModel.updateDataFromExternalItem(it, weekOffset)
 
                                     coroutineScope.launch {
-                                        pagerState.animateScrollToPage(
+                                        delay(200)
+                                        pagerState.scrollToPage(
                                             itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex
                                         )
                                     }
@@ -250,7 +269,7 @@ fun MainUI(
                     itemCalendarSelectedEvent(itemDayUIModelSelected, weekOffset)
 
                     localCoroutine.launch {
-                        pagerState.animateScrollToPage(itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex)
+                        pagerState.scrollToPage(itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex)
                     }
                 })
 
@@ -272,6 +291,11 @@ fun MainUI(
                     )
                 }
             }
+            val dateModel = itemDayUIModelSelected.simpleDateModel
+            Text(
+                modifier = Modifier.padding(horizontal = 10.dp),
+                text = "dayOfWeek: ${dateModel.dayOfWeekIndex} | date: ${dateModel.dayOfMonth}/${dateModel.month}/${dateModel.year}"
+            )
             Row(
                 modifier = Modifier.padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -544,10 +568,10 @@ fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
         this.add(Calendar.DATE, -dayOfWeek)
     }
 
-    val differenceTimeMillis = calendarDate.timeInMillis - reference.timeInMillis
+    val differenceTimeMillis = (calendarDate.timeInMillis/1000L) - (reference.timeInMillis/1000L)
 
-    // 1 day = (1000ms / 1s) * (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (7day)  = 604800000L
-    return (differenceTimeMillis / 604800000L).toInt()
+    // 1 day = (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (7day)  = 604800000L
+    return (differenceTimeMillis / 604800L).toInt()
 }
 
 fun ItemDayUIModel.equalsInSimpleDate(itemDayUIModel: ItemDayUIModel) =
