@@ -60,8 +60,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
-import kotlin.math.abs
-import kotlin.math.sign
 
 class MainViewModel : ViewModel() {
 
@@ -124,16 +122,23 @@ class MainViewModel : ViewModel() {
     private fun getItemDayUIModelFromIndex(
         dayOfWeekIndexState: Int,
         weekIndexState: Int
-    ): ItemDayUIModel? {
-        return calendarMap[weekIndexState]?.get(dayOfWeekIndexState)
+    ): ItemDayUIModel {
+        return calendarMap[weekIndexState]?.get(dayOfWeekIndexState) ?: run {
+            refreshWeekMap(weekIndexState)
+            calendarMap[weekIndexState]?.get(dayOfWeekIndexState)!!
+        }
     }
 
     fun updateDataFromExternalItem(externalItemDayUIModel: ItemDayUIModel, weekOffset: Int) {
-        refreshWeekMap(weekOffset)
-        updateItemDayUIModelSelected(
-            externalItemDayUIModel,
-            weekOffset
-        )
+        val dayOfWeek = externalItemDayUIModel.simpleDateModel.dayOfWeekIndex
+        // Here we use the item directly from map from the date created by an external source
+        getItemDayUIModelFromIndex(dayOfWeek, weekOffset).let {
+            refreshWeekMap(weekOffset)
+            updateItemDayUIModelSelected(
+                it,
+                weekOffset
+            )
+        }
     }
 
 }
@@ -198,13 +203,7 @@ class MainActivity : ComponentActivity() {
                                     }
 
                                     coroutineScope.launch {
-                                        if (weekOffset < 0) {
-                                            listState.animateScrollToItem(Int.MAX_VALUE / 2 + weekOffset + 1)
-                                        } else if (weekOffset > 0) {
-                                            listState.animateScrollToItem(Int.MAX_VALUE / 2 + weekOffset - 1)
-                                        } else {
-                                            listState.animateScrollToItem(Int.MAX_VALUE / 2)
-                                        }
+                                        listState.animateScrollToItem(Int.MAX_VALUE / 2 + weekOffset)
                                     }
                                 }
                                 closeBottomSheet()
@@ -214,7 +213,6 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
-
     }
 }
 
@@ -233,7 +231,6 @@ fun MainUI(
     calendarClickEvent: () -> Unit = {},
     itemCalendarSelectedEvent: (ItemDayUIModel, Int) -> Unit = { _, _ -> }
 ) {
-
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colors.background
@@ -547,17 +544,20 @@ fun Calendar.toItemDayUIModel() = this.toSimpleDateModel().let {
 }
 
 fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
-    val reference = this.toCalendar()
-    val calendarDate = item.toCalendar()
-
-    val differenceTimeMillis = reference.timeInMillis - calendarDate.timeInMillis
-    val sign = -sign(differenceTimeMillis.toDouble()).toInt()
-
-    val differenceCalendar = Calendar.getInstance().apply { // FIXME: This method generate errors for mondays
-        timeInMillis = abs(differenceTimeMillis)
+    val reference = this.toCalendar().apply {
+        val dayOfWeek = this.getDayOfWeekIndex()
+        this.add(Calendar.DATE, -(dayOfWeek))
     }
 
-    return sign * differenceCalendar.get(Calendar.WEEK_OF_YEAR)
+    val calendarDate = item.toCalendar().apply {
+        val dayOfWeek = this.getDayOfWeekIndex()
+        this.add(Calendar.DATE, -(dayOfWeek))
+    }
+
+    val differenceTimeMillis = calendarDate.timeInMillis - reference.timeInMillis
+
+    // 1 day = (1000ms / 1s) * (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (6day)  = 604800000L
+    return (differenceTimeMillis / 604800000).toInt()
 }
 
 fun ItemDayUIModel.equalsInSimpleDate(itemDayUIModel: ItemDayUIModel) =
@@ -595,4 +595,3 @@ data class SimpleDateModel(
 )
 
 ////////////////////////////////////////////////////////
-
