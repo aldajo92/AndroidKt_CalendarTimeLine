@@ -89,6 +89,8 @@ class MainViewModel : ViewModel() {
     }
 
     fun refreshWeekMap(weekIndex: Int) {
+        _weekOffsetFlow.value = weekIndex
+
         calendarMap.saveToMapNoDuplicate(
             (weekIndex + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
                 weekIndex + 1,
@@ -506,10 +508,6 @@ fun Calendar.getYear(): Int {
     return get(Calendar.YEAR)
 }
 
-fun Calendar.addDays(days: Int): Calendar = Calendar.getInstance().apply {
-    this.add(Calendar.DATE, days)
-}
-
 fun <K, V> MutableMap<K, V>.saveToMapNoDuplicate(entry: Pair<K, V>) {
     if (!this.containsKey(entry.first)) {
         this[entry.first] = entry.second
@@ -568,7 +566,8 @@ fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
         this.add(Calendar.DATE, -dayOfWeek)
     }
 
-    val differenceTimeMillis = (calendarDate.timeInMillis/1000L) - (reference.timeInMillis/1000L)
+    val differenceTimeMillis =
+        (calendarDate.timeInMillis / 1000L) - (reference.timeInMillis / 1000L)
 
     // 1 day = (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (7day)  = 604800000L
     return (differenceTimeMillis / 604800L).toInt()
