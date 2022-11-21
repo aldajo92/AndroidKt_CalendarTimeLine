@@ -24,7 +24,7 @@ class CalendarOperationsTest {
         assertEquals(10, month)
         assertEquals(6, day)
 
-        val currentSimpleDateModel = currentCalendar.toSimpleDateModel()
+        val currentSimpleDateModel = currentCalendar.toSimpleDateModel(1)
 
         assertEquals(year, currentSimpleDateModel.year)
         assertEquals(month, currentSimpleDateModel.month)

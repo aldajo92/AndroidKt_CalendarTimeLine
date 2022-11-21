@@ -66,8 +66,11 @@ import java.util.*
 
 class MainViewModel : ViewModel() {
 
+    private val _starDayWeekIndex = MutableStateFlow(0) // TODO: with zero starts from sunday, with one starts from monday and so on
+    val starDayWeekIndex: StateFlow<Int> = _starDayWeekIndex
+
     val todayCalendar = Calendar.getInstance()
-    private val todayItemDayUIModel = todayCalendar.toItemDayUIModel()
+    private val todayItemDayUIModel = todayCalendar.toItemDayUIModel(_starDayWeekIndex.value)
 
     val calendarMap = mutableMapOf<Int, List<ItemDayUIModel>>()
 
@@ -95,20 +98,23 @@ class MainViewModel : ViewModel() {
             (weekIndex + 1) to todayCalendar.weekItemDaysFromWeeksOffset(
                 weekIndex + 1,
                 todayCalendar,
-                dateComparator
+                dateComparator,
+                _starDayWeekIndex.value
             )
         )
         calendarMap.saveToMapNoDuplicate(
             weekIndex to todayCalendar.weekItemDaysFromWeeksOffset(
                 weekIndex, todayCalendar,
-                dateComparator
+                dateComparator,
+                _starDayWeekIndex.value
             )
         )
         calendarMap.saveToMapNoDuplicate(
             (weekIndex - 1) to todayCalendar.weekItemDaysFromWeeksOffset(
                 weekIndex - 1,
                 todayCalendar,
-                dateComparator
+                dateComparator,
+                _starDayWeekIndex.value
             )
         )
     }
@@ -133,20 +139,6 @@ class MainViewModel : ViewModel() {
         )
         // Here we use the item directly from map from the date created by an external source
         getItemDayUIModelFromIndex(dayOfWeek, weekOffset) {
-            Log.i(
-                "itemDayUI_equals",
-                (externalItemDayUIModel.simpleDateModel == it.simpleDateModel).toString()
-            )
-            if (externalItemDayUIModel.simpleDateModel != it.simpleDateModel) {
-                Log.i(
-                    "itemDayUI_selected",
-                    externalItemDayUIModel.toString()
-                )
-                Log.i(
-                    "itemDayUI_mapError",
-                    calendarMap[weekOffset]?.toString().orEmpty()
-                )
-            }
             updateItemDayUIModelSelected(
                 it,
                 weekOffset
@@ -175,6 +167,8 @@ class MainActivity : ComponentActivity() {
                 itemDayUIModelSelected.simpleDateModel.dayOfWeekIndex
             )
 
+            val startDayWeekIndex by mainViewModel.starDayWeekIndex.collectAsStateWithLifecycle(1)
+
             val coroutineScope = rememberCoroutineScope()
 
             MainUI(
@@ -198,12 +192,13 @@ class MainActivity : ComponentActivity() {
                 calendarClickEvent = {
                     showAsBottomSheet { closeBottomSheet ->
                         BottomCalendarSheet(
+                            startDayWeekIndex = startDayWeekIndex,
                             simpleDateModel = itemDayUIModelSelected.simpleDateModel,
                             onDoneEvent = { itemDayFromCalendar ->
                                 itemDayFromCalendar?.let {
                                     val weekOffset = mainViewModel.todayCalendar
-                                        .toSimpleDateModel()
-                                        .getWeeksOffset(it.simpleDateModel)
+                                        .toSimpleDateModel(startDayWeekIndex)
+                                        .getWeeksOffset(it.simpleDateModel, startDayWeekIndex)
 
                                     mainViewModel.updateDataFromExternalItem(it, weekOffset)
 
@@ -313,7 +308,8 @@ fun MainUI(
 @Composable
 fun BottomCalendarSheet(
     modifier: Modifier = Modifier,
-    simpleDateModel: SimpleDateModel = Calendar.getInstance().toSimpleDateModel(),
+    startDayWeekIndex: Int = 0,
+    simpleDateModel: SimpleDateModel = Calendar.getInstance().toSimpleDateModel(startDayWeekIndex),
     onCancelEvent: () -> Unit = {},
     onDoneEvent: (ItemDayUIModel?) -> Unit = {},
 ) {
@@ -340,14 +336,14 @@ fun BottomCalendarSheet(
         }
         AndroidView(modifier = Modifier.fillMaxWidth(), factory = {
             CalendarView(it).apply {
-                firstDayOfWeek = Calendar.MONDAY
+                firstDayOfWeek = Calendar.SUNDAY + startDayWeekIndex
             }
         }, update = {
             it.date = simpleDateModel.toCalendar().timeInMillis
             it.setOnDateChangeListener { _, year, month, day ->
                 dateSelected = SimpleDateModel(dayOfMonth = day, month = month, year = year)
                     .toCalendar()
-                    .toItemDayUIModel()
+                    .toItemDayUIModel(startDayWeekIndex)
             }
         })
     }
@@ -417,7 +413,7 @@ fun WeekRowCalendarComponent(
         ItemDayUIModel(
             simpleDateModel = SimpleDateModel(dayOfWeekIndex = it),
             numberDay = "$it",
-            textDay = daysInWeekArray[it]
+            textDay = getDaysInWeekArray(it)
         )
     },
     itemDayUIModelSelected: ItemDayUIModel = ItemDayUIModel(),
@@ -491,9 +487,11 @@ fun ItemDayComponent(
 }
 
 ////////////////////////////////////////////////////////////////////////////
-fun Calendar.getDayOfWeekIndex(): Int {
+fun Calendar.getDayOfWeekIndex(
+    startDayWeekIndex: Int = 0
+): Int {
     val dayOfWeekFromCalendar = this.get(Calendar.DAY_OF_WEEK) + 7
-    return (dayOfWeekFromCalendar - 2) % 7
+    return (dayOfWeekFromCalendar - startDayWeekIndex - 1) % 7
 }
 
 fun Calendar.getDayOfMonth(): Int {
@@ -517,12 +515,13 @@ fun <K, V> MutableMap<K, V>.saveToMapNoDuplicate(entry: Pair<K, V>) {
 fun Calendar.weekItemDaysFromWeeksOffset(
     index: Int,
     currentCalendar: Calendar = Calendar.getInstance(),
-    comparativeDay: (Calendar, Calendar) -> Boolean = { _, _ -> false }
+    comparativeDay: (Calendar, Calendar) -> Boolean = { _, _ -> false },
+    startDayWeekIndex: Int = 0
 ): List<ItemDayUIModel> {
     val localCalendar = this.clone() as Calendar
     localCalendar.add(Calendar.DATE, 7 * index)
 
-    val dayOfWeek = localCalendar.getDayOfWeekIndex()
+    val dayOfWeek = localCalendar.getDayOfWeekIndex(startDayWeekIndex)
 
     val calendarNearMonday = localCalendar.clone() as Calendar
     calendarNearMonday.add(Calendar.DATE, -dayOfWeek)
@@ -532,51 +531,58 @@ fun Calendar.weekItemDaysFromWeeksOffset(
         tmpCalendar.add(Calendar.DATE, it)
         val dayNumberInMonth = tmpCalendar.get(Calendar.DAY_OF_MONTH)
         ItemDayUIModel(
-            simpleDateModel = tmpCalendar.toSimpleDateModel(),
+            simpleDateModel = tmpCalendar.toSimpleDateModel(startDayWeekIndex),
             numberDay = "$dayNumberInMonth",
-            textDay = daysInWeekArray[it],
+            textDay = getDaysInWeekArray(it, startDayWeekIndex),
             markDate = comparativeDay(currentCalendar, tmpCalendar)
         )
     }
 }
 
-fun Calendar.toSimpleDateModel() = SimpleDateModel(
-    dayOfWeekIndex = this.getDayOfWeekIndex(),
+fun Calendar.toSimpleDateModel(
+    startDayWeekIndex: Int = 0
+) = SimpleDateModel(
+    dayOfWeekIndex = this.getDayOfWeekIndex(startDayWeekIndex),
     dayOfMonth = this.getDayOfMonth(),
     month = this.getMonth(),
     year = this.getYear()
 )
 
-fun Calendar.toItemDayUIModel() = this.toSimpleDateModel().let {
+fun Calendar.toItemDayUIModel(
+    startDayWeekIndex: Int = 0
+) = this.toSimpleDateModel(startDayWeekIndex).let {
     ItemDayUIModel(
         simpleDateModel = it,
         numberDay = it.dayOfMonth.toString(),
-        textDay = daysInWeekArray[it.dayOfWeekIndex]
+        textDay = getDaysInWeekArray(it.dayOfWeekIndex, startDayWeekIndex)
     )
 }
 
-fun SimpleDateModel.getWeeksOffset(item: SimpleDateModel): Int {
+fun SimpleDateModel.getWeeksOffset(
+    item: SimpleDateModel,
+    startDayWeekIndex: Int = 0
+): Int {
     val reference = this.toCalendar().apply {
-        val dayOfWeek = this.getDayOfWeekIndex()
+        val dayOfWeek = this.getDayOfWeekIndex(startDayWeekIndex)
         this.add(Calendar.DATE, -dayOfWeek)
     }
 
     val calendarDate = item.toCalendar().apply {
-        val dayOfWeek = this.getDayOfWeekIndex()
+        val dayOfWeek = this.getDayOfWeekIndex(startDayWeekIndex)
         this.add(Calendar.DATE, -dayOfWeek)
     }
 
     val differenceTimeMillis =
         (calendarDate.timeInMillis / 1000L) - (reference.timeInMillis / 1000L)
 
-    // 1 day = (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (7day)  = 604800000L
+    // 1 day = (60s / 1min) * (60 min / 1hour) * (24 hour/ 1day) * (7day)  = 604800L
     return (differenceTimeMillis / 604800L).toInt()
 }
 
 fun ItemDayUIModel.equalsInSimpleDate(itemDayUIModel: ItemDayUIModel) =
     this.simpleDateModel == itemDayUIModel.simpleDateModel
 
-fun SimpleDateModel.toCalendar() = Calendar.getInstance().apply {
+fun SimpleDateModel.toCalendar(): Calendar = Calendar.getInstance().apply {
     set(Calendar.DAY_OF_MONTH, this@toCalendar.dayOfMonth)
     set(Calendar.MONTH, this@toCalendar.month)
     set(Calendar.YEAR, this@toCalendar.year)
@@ -584,7 +590,10 @@ fun SimpleDateModel.toCalendar() = Calendar.getInstance().apply {
 
 ////////////////////////////////////////////////////////////////////////////
 
-val daysInWeekArray = arrayOf("M", "T", "W", "T", "F", "S", "S")
+val daysInWeekArray = arrayOf("S", "M", "T", "W", "T", "F", "S")
+
+fun getDaysInWeekArray(position: Int, startDayWeekIndex: Int = 0) =
+    daysInWeekArray[(position + startDayWeekIndex) % 7]
 
 val dateComparator = { today: Calendar, dayToRender: Calendar ->
     today.timeInMillis >= dayToRender.timeInMillis
